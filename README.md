@@ -15,6 +15,8 @@ My JSON contains the declarations of function and classes within the provided ko
 
 I implemented a nested hierarchy, as it was in the example. If there are no nested declarations, the field `declarations` will be omitted and not presented.
 
+[json](https://github.com/Valerii3/OA_RetrieveDeclarations/blob/main/cli_tool/src/main/resources/output.json)
+
 # How to run
 1. `git clone git@github.com:Valerii3/OA_RetrieveDeclarations.git`
 2. Open the `cli_tool` folder within the *IDE*
