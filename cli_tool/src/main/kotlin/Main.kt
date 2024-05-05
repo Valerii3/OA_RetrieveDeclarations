@@ -1,5 +1,4 @@
-import com.google.gson.Gson
-import com.intellij.openapi.Disposable
+import com.google.gson.GsonBuilder
 import com.intellij.openapi.project.Project
 import com.intellij.psi.PsiFileFactory
 import com.intellij.psi.util.PsiTreeUtil
@@ -29,25 +28,41 @@ private fun getClassProperties(declaration: KtClass) = declaration.getProperties
 
 private fun getConstructorProperties(declaration: KtClass) = declaration.primaryConstructor?.valueParameters?.map { mapOf("name" to it.name, "type" to it.typeReference?.text) } ?: emptyList()
 
+private fun getBody(declaration: KtNamedDeclaration) = declaration.text.replace(Regex("\\s+"), " ").trim()
+
+private fun mapWithNestedDeclarations(baseMap: Map<String, Any?>, nestedDeclarations: List<Map<String, Any?>>): Map<String, Any?> {
+    if (nestedDeclarations.isEmpty()) return baseMap
+    return baseMap + mapOf("declarations" to nestedDeclarations)
+}
+
 private fun parseDeclaration(declaration: KtNamedDeclaration): Map<String, Any?>? {
     return when (declaration) {
         is KtNamedFunction ->  {
-            mapOf(
+            val nestedDeclarations = PsiTreeUtil.findChildrenOfType(declaration, KtNamedDeclaration::class.java)
+                .mapNotNull { parseDeclaration(it) }
+
+            val baseMap = mapOf(
                 "type" to "function",
                 "name" to declaration.name,
                 "parameters" to declaration.valueParameters.map { mapOf("name" to it.name, "type" to it.typeReference?.text) },
                 "returnType" to (declaration.typeReference?.text ?: "Unit"),
-                "body" to declaration.text.trimIndent()
+                "body" to getBody(declaration)
             )
+            mapWithNestedDeclarations(baseMap, nestedDeclarations)
+
         }
         is KtClass -> {
             val allProperties = getConstructorProperties(declaration) + getClassProperties(declaration)
-            mapOf(
+            val nestedDeclarations = PsiTreeUtil.findChildrenOfType(declaration, KtNamedDeclaration::class.java)
+                .mapNotNull { parseDeclaration(it) }
+
+            val baseMap = mapOf(
                 "type" to "class",
                 "name" to declaration.name,
                 "properties" to allProperties,
-                "body" to declaration.text.trim()
+                "body" to getBody(declaration)
             )
+            mapWithNestedDeclarations(baseMap, nestedDeclarations)
         }
         else -> null
     }
@@ -63,8 +78,10 @@ fun main(args: Array<String>) {
         content
     )
 
-    val declarations = PsiTreeUtil.findChildrenOfType(psiFile, KtNamedDeclaration::class.java)
-    val decls = declarations.mapNotNull { parseDeclaration(it) }
+    val rootDeclarations = PsiTreeUtil.findChildrenOfType(psiFile, KtNamedDeclaration::class.java)
+        .filter { it.parent == psiFile } // top-level declarations
+    val decls = rootDeclarations.mapNotNull { parseDeclaration(it) }
 
-    println(Gson().toJson(mapOf("declarations" to decls)))
+    val gson = GsonBuilder().disableHtmlEscaping().create() // escaping && and ==
+    println(gson.toJson(mapOf("declarations" to decls)))
 }
